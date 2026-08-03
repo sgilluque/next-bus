@@ -1,0 +1,13 @@
+{
+  "name": "next-bus",
+  "version": "1.0.0",
+  "description": "Next-bus dashboard for a CRTM (Consorcio Regional de Transportes de Madrid) stop",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

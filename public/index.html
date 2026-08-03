@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Próximo bus</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f5f7;
+    --card: #ffffff;
+    --text: #1a1a1a;
+    --muted: #6b6b70;
+    --accent: #c8102e;
+    --border: #e5e5e7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121214;
+      --card: #1c1c1f;
+      --text: #f2f2f2;
+      --muted: #9a9a9e;
+      --border: #2c2c30;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    padding: 24px 16px 64px;
+  }
+  main { width: 100%; max-width: 480px; }
+  header { text-align: center; margin-bottom: 20px; }
+  header h1 {
+    font-size: 1.3rem;
+    margin: 0 0 4px;
+  }
+  header p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 18px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .line-badge {
+    background: var(--accent);
+    color: white;
+    font-weight: 700;
+    font-size: 0.95rem;
+    border-radius: 8px;
+    padding: 8px 10px;
+    min-width: 44px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .dest {
+    flex: 1;
+    min-width: 0;
+  }
+  .dest .to { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+  .dest .name {
+    font-size: 0.95rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .countdown {
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .countdown .mins { font-size: 1.4rem; font-weight: 700; }
+  .countdown .label { font-size: 0.7rem; color: var(--muted); }
+  .empty, .error {
+    text-align: center;
+    color: var(--muted);
+    padding: 32px 16px;
+    font-size: 0.95rem;
+  }
+  .error { color: var(--accent); }
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.75rem;
+    margin-top: 16px;
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 id="stop-name">Cargando parada…</h1>
+    <p id="stop-lines"></p>
+  </header>
+  <div id="results"></div>
+  <footer id="updated"></footer>
+</main>
+
+<script>
+  const REFRESH_MS = 30000;
+  let arrivalsCache = [];
+
+  function formatMinutes(isoTime) {
+    const diffMs = new Date(isoTime) - new Date();
+    return Math.max(0, Math.round(diffMs / 60000));
+  }
+
+  function render(data) {
+    const stopNameEl = document.getElementById("stop-name");
+    const stopLinesEl = document.getElementById("stop-lines");
+    const resultsEl = document.getElementById("results");
+    const updatedEl = document.getElementById("updated");
+
+    stopNameEl.textContent = data.stop?.name || "Parada";
+    stopLinesEl.textContent = data.lines?.length
+      ? "Líneas: " + data.lines.map((l) => l.code).join(", ")
+      : "";
+
+    arrivalsCache = data.arrivals || [];
+
+    if (arrivalsCache.length === 0) {
+      resultsEl.innerHTML = '<div class="empty">No hay tiempos disponibles ahora mismo (puede que esté fuera de horario de servicio).</div>';
+    } else {
+      resultsEl.innerHTML = arrivalsCache
+        .map(
+          (a, i) => `
+        <div class="card" data-index="${i}">
+          <div class="line-badge">${a.line}</div>
+          <div class="dest">
+            <div class="to">Hacia</div>
+            <div class="name">${a.destination}</div>
+          </div>
+          <div class="countdown">
+            <div class="mins" data-mins>—</div>
+            <div class="label">min</div>
+          </div>
+        </div>`
+        )
+        .join("");
+    }
+
+    updatedEl.textContent = "Actualizado " + new Date(data.updatedAt).toLocaleTimeString("es-ES");
+    tickCountdowns();
+  }
+
+  function tickCountdowns() {
+    document.querySelectorAll(".card").forEach((card) => {
+      const idx = Number(card.dataset.index);
+      const arrival = arrivalsCache[idx];
+      if (!arrival) return;
+      const mins = formatMinutes(arrival.time);
+      const el = card.querySelector("[data-mins]");
+      el.textContent = mins <= 0 ? "Ahora" : mins;
+    });
+  }
+
+  async function fetchData() {
+    try {
+      const res = await fetch("/api/next-bus");
+      if (!res.ok) throw new Error("bad response");
+      const data = await res.json();
+      render(data);
+    } catch (err) {
+      document.getElementById("results").innerHTML =
+        '<div class="error">No se pudo conectar con el servidor.</div>';
+    }
+  }
+
+  fetchData();
+  setInterval(fetchData, REFRESH_MS);
+  setInterval(tickCountdowns, 1000);
+</script>
+</body>
+</html>
